@@ -1,7 +1,7 @@
 import os
 import re
 import pandas as pd
-from pypdf import PdfReader
+import pdfplumber
 
 folder_path = r"C:\Users\pedro\Downloads\curriculums"
 
@@ -22,36 +22,26 @@ def extract_contact(text):
         "e-mails": emails if emails else ["E-mail não encontrado"]
     }
 
-# Need to improve this function to extrect more information and to be more accurate
+# This function still needs some improvements, but it's a good start
 def extract_experience(text):
     experience_patterns = [
-        r"(\d+\s+(anos|meses)\s+(de experiência|trabalhando))",
-        r"(\b\d{4}\b\s*[-–]\s*\b\d{4}\b)",
-        r"(\b\d{1,2}/\d{4}\b\s*[-–]\s*\b\d{1,2}/\d{4}\b)"
-        # Add more patterns here
+        r'(?P<cargo>[\w\s-]+)\n(?P<empresa>[\w\s]+)\s*\|\s*(?P<periodo>\d{4} - \d{4}|\d{4} - Presente|\d{4})',
+        r'(?P<cargo>[\w\s-]+)\s*\|\s*(?P<empresa>[\w\s]+)\s*\|\s*(?P<periodo>\d{4} - \d{4}|\d{4} - Presente|\d{4})',
+        r'(?P<cargo>[\w\s-]+)\n(?P<empresa>[\w\s]+)\s*\|\s*(?P<periodo>\d{4} - \d{4}|\d{4} - atual|\d{4})',
+        r'(?P<cargo>[\w\s-]+)\s+at\s+(?P<empresa>[\w\s]+)\s*\((?P<periodo>[\d\s/-]+)\)'
     ]
     
-    role_patterns = [
-        r"cargo[:\s]*([^\n,.;]+)",
-        r"posição[:\s]*([^\n,.;]+)",
-        r"função[:\s]*([^\n,.;]+)"
-    ]
-
-    time_matches = []
+    experiences = []
     for pattern in experience_patterns:
-        time_matches.extend(re.findall(pattern, text, flags=re.IGNORECASE))
+        matches = re.finditer(pattern, text, flags=re.IGNORECASE)
+        for match in matches:
+            experiences.append({ # This append is not working as expected, need to make it go in other cells, and not just one
+                "Cargo": match.group('cargo').strip(),
+                "Empresa": match.group('empresa').strip(),
+                "Período": match.group('periodo').strip()
+            })
 
-    role_matches = []
-    for pattern in role_patterns:
-        role_matches.extend(re.findall(pattern, text, flags=re.IGNORECASE))
-
-    time_results = [match[0] if isinstance(match, tuple) else match for match in time_matches]
-    roles_results = [match.strip() for match in role_matches]
-    
-    return {
-        "tempos": time_results if time_results else ["Tempo de experiência não encontrado"],
-        "funções": roles_results if roles_results else ["Função não encontrada"]
-    }
+    return experiences if experiences else "Nenhuma experiência identificada"
 
 def approved(found_keywords):
     return len(found_keywords) > 5
@@ -59,17 +49,18 @@ def approved(found_keywords):
 for filename in os.listdir(folder_path):
     if filename.endswith(".pdf"):
         file_path = os.path.join(folder_path, filename)
-        reader = PdfReader(file_path)
-        all_text = ""
         
-        for page in reader.pages:
-            all_text += page.extract_text().lower()
+        with pdfplumber.open(file_path) as pdf:
+            all_text = ""
+            for page in pdf.pages:
+                all_text += page.extract_text() + "\n"
+                print(all_text)
 
         print(f"Analisando: {filename}")
         
         contact = extract_contact(all_text)
-        experience = extract_experience(all_text)
-        found_keywords = [keyword for keyword in keywords if keyword.lower() in all_text]
+        experiences = extract_experience(all_text)
+        found_keywords = [keyword for keyword in keywords if keyword.lower() in all_text.lower()]
         is_approved = approved(found_keywords)
 
         results.append({
@@ -78,10 +69,9 @@ for filename in os.listdir(folder_path):
             "E-mails": ", ".join(contact["e-mails"]),
             "Palavras-chave encontradas": ", ".join(found_keywords),
             "Quantidade de palavras-chave": len(found_keywords),
-            "Tempos de experiência": ", ".join(experience["tempos"]),
-            "Funções": ", ".join(experience["funções"]),
-            "Aprovado": "Sim" if is_approved else "Não",
-            "Páginas": len(reader.pages)
+            # Divide the experiences in different columns and cells
+            "Experiências": experiences if isinstance(experiences, str) else pd.json_normalize(experiences).to_string(index=False),
+            "Aprovado": "Sim" if is_approved else "Não"
         })
 
 output_file = "curriculums_analysis.xlsx"
