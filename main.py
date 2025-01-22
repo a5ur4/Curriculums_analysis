@@ -12,12 +12,11 @@ folder_path = r"C:\Users\pedro\Downloads\curriculums"
 path_tesseract = r"C:\Users\pedro\AppData\Local\Programs\Tesseract-OCR"
 poppler_path = r"C:\poppler\Library\bin"
 save_path = r"C:\Users\pedro\Downloads\curriculums\images"
+txt_save_path = r"C:\Users\pedro\Downloads\curriculums\txt_files"
 pytesseract.pytesseract.tesseract_cmd = os.path.join(path_tesseract, "tesseract.exe")
 
 keywords = ["Java", "Spring", "Python", "Django", "JavaScript", "React", "Node", 
             "SQL", "NoSQL", "MongoDB", "PostgreSQL", "MySQL", "HTML", "CSS", "Bootstrap"]
-
-names = ["Pedro", "João", "Maria", "Vinicius", "José", "Carlos", "Fernanda", "Mariana", "Paulo", "Lucas", "Luana", "Leonardo", "Arthur"]
 
 results = []
 
@@ -42,36 +41,30 @@ def extract_text(image_path):
         logging.error(f"Erro ao extrair texto da imagem: {image_path} - {e}")
         return ""
 
-#This function definitely need to be remade, but it's a good start
-def extract_name(text):
-    for name in names:
-        if name.lower() in text.lower():
-            print(f"Nome encontrado: {name}")
-            return name
+def extract_name_from_text(text):
+    lines = text.splitlines()
+    for line in lines[:2]:  # Analyse only the first two lines
+        for name in line.split():
+            if name.lower() in line.lower():
+                return name
     return "Nome não encontrado"
 
 def extract_contact(text):
     phone_pattern = r'\(?\d{2}\)?\s?\d{4,5}-?\d{4}'
-    email_pattern = r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}' # Need to improve this regex
+    email_pattern = r'[a-zA-Z0-9._%+-]+\s?@\s?[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}'
 
     phones = re.findall(phone_pattern, text)
     emails = re.findall(email_pattern, text)
-    
-    print(phones)
-    print(emails)
     
     return {
         "telefones": phones if phones else ["Telefone não encontrado"],
         "e-mails": emails if emails else ["E-mail não encontrado"]
     }
-    
-# I don't know if this function is doing what it should, but i can't thing in a better way right now to take the experience
+
 def extract_experience(text):
     experience_patterns = [
         r'(?P<cargo>[\w\s-]+)\n(?P<empresa>[\w\s]+)\s*\|\s*(?P<periodo>\d{4} - \d{4}|\d{4} - Presente|\d{4})',
-        r'(?P<cargo>[\w\s-]+)\s*\|\s*(?P<empresa>[\w\s]+)\s*\|\s*(?P<periodo>\d{4} - \d{4}|\d{4} - Presente|\d{4})',
-        r'(?P<cargo>[\w\s-]+)\n(?P<empresa>[\w\s]+)\s*\|\s*(?P<periodo>\d{4} - \d{4}|\d{4} - atual|\d{4})',
-        r'(?P<cargo>[\w\s-]+)\s+at\s+(?P<empresa>[\w\s]+)\s*\((?P<periodo>[\d\s/-]+)\)'
+        r'(?P<cargo>[\w\s-]+)\s*\|\s*(?P<empresa>[\w\s]+)\s*\|\s*(?P<periodo>\d{4} - \d{4}|\d{4} - Presente|\d{4})'
     ]
     
     experiences = []
@@ -95,7 +88,7 @@ def create_sheet(results):
         ws = wb.active
         ws.title = "Resultados"
 
-        headers = ["Arquivo", "Telefones", "E-mails", "Experiências", "Aprovado"]
+        headers = ["Arquivo", "Nome", "Telefones", "E-mails", "Experiências", "Aprovado"]
         for col, header in enumerate(headers, start=1):
             cell = ws.cell(row=1, column=col, value=header)
             cell.font = openpyxl.styles.Font(bold=True)
@@ -108,20 +101,22 @@ def create_sheet(results):
                 continue
 
             arquivo = result.get("Arquivo", "Desconhecido")
+            name = result.get("Nome", "Nome não encontrado")
             telefones = result.get("Telefones", ["Telefone não encontrado"])
             emails = result.get("E-mails", ["E-mail não encontrado"])
             experiencias = result.get("Experiências", [])
             aprovado = result.get("Aprovado", False)
 
             ws[f"A{i}"] = arquivo
-            ws[f"B{i}"] = ", ".join(telefones)
-            ws[f"C{i}"] = ", ".join(emails)
-            ws[f"D{i}"] = "\n".join([f"{exp.get('Cargo', 'Desconhecido')} - "
+            ws[f"B{i}"] = name
+            ws[f"C{i}"] = ", ".join(telefones)
+            ws[f"D{i}"] = ", ".join(emails)
+            ws[f"E{i}"] = "\n".join([f"{exp.get('Cargo', 'Desconhecido')} - "
                 f"{exp.get('Empresa', 'Desconhecido')} - "
                 f"{exp.get('Período', 'Desconhecido')}"
                     for exp in experiencias if isinstance(exp, dict)])
-            ws[f"D{i}"].alignment = openpyxl.styles.Alignment(wrap_text=True)
-            ws[f"E{i}"] = "Sim" if aprovado else "Não"
+            ws[f"F{i}"].alignment = openpyxl.styles.Alignment(wrap_text=True)
+            ws[f"F{i}"] = "Sim" if aprovado else "Não"
 
         print("Ajustando larguras das colunas...")
         for col in ws.columns:
@@ -146,6 +141,9 @@ def create_sheet(results):
 if not os.path.exists(save_path):
     os.makedirs(save_path)
 
+if not os.path.exists(txt_save_path):
+    os.makedirs(txt_save_path)
+
 for filename in os.listdir(folder_path):
     if filename.endswith(".pdf"):
         file_path = os.path.join(folder_path, filename)
@@ -159,7 +157,11 @@ for filename in os.listdir(folder_path):
             all_text += text
             os.remove(image_path)
         
-        name = extract_name(all_text)
+        txt_file_path = os.path.join(txt_save_path, f"{os.path.splitext(filename)[0]}.txt")
+        with open(txt_file_path, "w", encoding="utf-8") as txt_file:
+            txt_file.write(all_text)
+
+        name = extract_name_from_text(all_text)
         contact_info = extract_contact(all_text)
         experience_info = extract_experience(all_text)
         found_keywords = [kw for kw in keywords if kw.lower() in all_text.lower()]
@@ -167,6 +169,7 @@ for filename in os.listdir(folder_path):
 
         results.append({
             "Arquivo": filename,
+            "Nome": name,
             "Telefones": contact_info["telefones"],
             "E-mails": contact_info["e-mails"],
             "Experiências": experience_info,
