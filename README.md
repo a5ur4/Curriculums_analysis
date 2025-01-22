@@ -5,8 +5,10 @@ This project is a Python script that analyzes PDF files containing curriculums (
 ## Requirements
 
 - Python 3.x
-- pandas
-- pdfplumber
+- pytesseract
+- opencv-python
+- openpyxl
+- pdf2image
 
 ## Installation
 
@@ -14,20 +16,24 @@ This project is a Python script that analyzes PDF files containing curriculums (
 2. Install the required Python packages using pip:
 
     ```sh
-    pip install pandas pdfplumber
+    pip install pytesseract opencv-python openpyxl pdf2image
     ```
+
+3. Install Tesseract OCR and Poppler:
+    - [Tesseract OCR](https://github.com/tesseract-ocr/tesseract)
+    - [Poppler](http://blog.alivate.com.au/poppler-windows/)
 
 ## Usage
 
 1. Place the PDF files containing the curriculums in a folder.
-2. Update the [folder_path](http://_vscodecontentref_/1) variable in the script to point to the folder containing the PDF files.
+2. Update the [folder_path](http://_vscodecontentref_/1), [path_tesseract](http://_vscodecontentref_/2), [poppler_path](http://_vscodecontentref_/3), [save_path](http://_vscodecontentref_/4), and [txt_save_path](http://_vscodecontentref_/5) variables in the script to point to the appropriate directories.
 3. Run the script:
 
     ```sh
-    python script.py
+    python main.py
     ```
 
-4. The script will analyze the PDF files and save the results in an Excel file named `curriculums_analysis.xlsx`.
+4. The script will analyze the PDF files, convert them to images, extract text, and save the results in an Excel file.
 
 ## Script Details
 
@@ -37,9 +43,9 @@ This project is a Python script that analyzes PDF files containing curriculums (
 
 ## Functions
 
-- [extract_contact(text)](http://_vscodecontentref_/2): Extracts phone numbers and email addresses from the given text.
-- [extract_experience(text)](http://_vscodecontentref_/3): Extracts work experience details from the given text.
-- [approved(found_keywords)](http://_vscodecontentref_/4): Determines if a curriculum is approved based on the number of keywords found.
+- [convert_to_image(file_path, poppler_path, save_path)](http://_vscodecontentref_/6): Converts PDF files to images.
+- [extract_text(image_path)](http://_vscodecontentref_/7): Extracts text from images using Tesseract OCR.
+- [extract_name_from_text(text)](http://_vscodecontentref_/8): Extracts names from the given text.
 
 ## Output
 
