@@ -4,6 +4,7 @@ import cv2
 import openpyxl
 import re
 import logging
+
 from pdf2image import convert_from_path
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -19,6 +20,8 @@ keywords = ["Java", "Spring", "Python", "Django", "JavaScript", "React", "Node",
             "SQL", "NoSQL", "MongoDB", "PostgreSQL", "MySQL", "HTML", "CSS", "Bootstrap"]
 
 results = []
+
+experiences = []
 
 def convert_to_image(file_path, poppler_path, save_path):
     try:
@@ -43,7 +46,7 @@ def extract_text(image_path):
 
 def extract_name_from_text(text):
     lines = text.splitlines()
-    for line in lines[:2]:  # Analyse only the first two lines
+    for line in lines[:2]:
         for name in line.split():
             if name.lower() in line.lower():
                 return name
@@ -62,22 +65,16 @@ def extract_contact(text):
     }
 
 def extract_experience(text):
-    experience_patterns = [
-        r'(?P<cargo>[\w\s-]+)\n(?P<empresa>[\w\s]+)\s*\|\s*(?P<periodo>\d{4} - \d{4}|\d{4} - Presente|\d{4})',
-        r'(?P<cargo>[\w\s-]+)\s*\|\s*(?P<empresa>[\w\s]+)\s*\|\s*(?P<periodo>\d{4} - \d{4}|\d{4} - Presente|\d{4})'
-    ]
-    
-    experiences = []
-    for pattern in experience_patterns:
-        matches = re.finditer(pattern, text, flags=re.IGNORECASE)
-        for match in matches:
-            experiences.append({
-                "Cargo": match.group('cargo').strip(),
-                "Empresa": match.group('empresa').strip(),
-                "Período": match.group('periodo').strip()
-            })
+    experiences.clear()
+    date_pattern = r'.*(20[0-2][0-9]|202[0-5]).*'
 
-    return experiences if experiences else ["Nenhuma experiência identificada"]
+    lines = text.split('\n')
+    for line in lines:
+        if re.search(date_pattern, line):
+            experiences.append(line.strip())
+    
+    unique_experiences = list(set(experiences))
+    return unique_experiences
 
 def aproved(found_keywords):
     return len(found_keywords) > 5
@@ -88,7 +85,7 @@ def create_sheet(results):
         ws = wb.active
         ws.title = "Resultados"
 
-        headers = ["Arquivo", "Nome", "Telefones", "E-mails", "Experiências", "Aprovado"]
+        headers = ["Arquivo", "Nome", "Telefones", "E-mails", "Aprovado", "Experiências"]
         for col, header in enumerate(headers, start=1):
             cell = ws.cell(row=1, column=col, value=header)
             cell.font = openpyxl.styles.Font(bold=True)
@@ -111,12 +108,9 @@ def create_sheet(results):
             ws[f"B{i}"] = name
             ws[f"C{i}"] = ", ".join(telefones)
             ws[f"D{i}"] = ", ".join(emails)
-            ws[f"E{i}"] = "\n".join([f"{exp.get('Cargo', 'Desconhecido')} - "
-                f"{exp.get('Empresa', 'Desconhecido')} - "
-                f"{exp.get('Período', 'Desconhecido')}"
-                    for exp in experiencias if isinstance(exp, dict)])
-            ws[f"F{i}"].alignment = openpyxl.styles.Alignment(wrap_text=True)
-            ws[f"F{i}"] = "Sim" if aprovado else "Não"
+            ws[f"E{i}"].alignment = openpyxl.styles.Alignment(wrap_text=True)
+            ws[f"E{i}"] = "Sim" if aprovado else "Não"
+            ws[f"F{i}"] = "\n".join(experiencias)
 
         print("Ajustando larguras das colunas...")
         for col in ws.columns:
@@ -172,8 +166,10 @@ for filename in os.listdir(folder_path):
             "Nome": name,
             "Telefones": contact_info["telefones"],
             "E-mails": contact_info["e-mails"],
-            "Experiências": experience_info,
-            "Aprovado": is_approved
+            "Aprovado": is_approved,
+            "Experiências": experience_info
         })
 
 create_sheet(results)
+
+#Made by: Pedro Bastos - a5ur4
