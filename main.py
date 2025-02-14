@@ -1,9 +1,11 @@
+import json
 import os
 import pytesseract
 import cv2
 import openpyxl
 import re
 import logging
+import requests
 
 from pdf2image import convert_from_path
 
@@ -43,6 +45,15 @@ def extract_text(image_path):
     except Exception as e:
         logging.error(f"Erro ao extrair texto da imagem: {image_path} - {e}")
         return ""
+
+def save_to_json(data, json_save_path, filename):
+    try:
+        json_file_path = os.path.join(json_save_path, f"{os.path.splitext(filename)[0]}.json")
+        with open(json_file_path, "w", encoding="utf-8") as json_file:
+            json.dump(data, json_file, ensure_ascii=False, indent=4)
+        logging.info(f"Dados salvos em JSON: {json_file_path}")
+    except Exception as e:
+        logging.error(f"Erro ao salvar dados em JSON: {filename} - {e}")
 
 def extract_name_from_text(text):
     lines = text.splitlines()
@@ -132,6 +143,32 @@ def create_sheet(results):
         logging.error(f"Erro ao criar planilha de resultados: {e}")
         print(f"Erro: {e}")
 
+# I think this is the best way to do this is seending all the extracted text to the LLM
+# and writing a better prompt to get the best results using the keywords as a base
+# and what the recruiter is looking for in the resume
+def send_to_llm(data):
+    url = "http://localhost:11434/api/generate" # Change this to the LLM API URL you are using
+    headers = {
+        "Content-Type": "application/json",
+    }
+    payload = {
+        "model": "llama3.2", # Change this to the model you are using
+        "prompt": f"Analyze this resume data: {json.dumps(data)}",
+        "stream": False
+    }
+    try:
+        response = requests.post(url, headers=headers, json=payload)
+        response.raise_for_status()
+        return response.json()
+    except requests.exceptions.RequestException as e:
+        logging.error(f"Error sending data to LLM: {e}")
+        return None
+
+for result in results:
+    llm_response = send_to_llm(result)
+    if llm_response:
+        logging.info(f"LLM response for {result['Arquivo']}: {llm_response}")
+
 if not os.path.exists(save_path):
     os.makedirs(save_path)
 
@@ -148,6 +185,7 @@ for filename in os.listdir(folder_path):
 
         for image_path in image_paths:
             text = extract_text(image_path)
+            save_to_json(text, txt_save_path, filename)
             all_text += text
             os.remove(image_path)
         
@@ -161,14 +199,20 @@ for filename in os.listdir(folder_path):
         found_keywords = [kw for kw in keywords if kw.lower() in all_text.lower()]
         is_approved = aproved(found_keywords)
 
-        results.append({
+        result = {
             "Arquivo": filename,
             "Nome": name,
             "Telefones": contact_info["telefones"],
             "E-mails": contact_info["e-mails"],
             "Aprovado": is_approved,
             "Experiências": experience_info
-        })
+        }
+
+        results.append(result)
+
+        llm_response = send_to_llm(result)
+        if llm_response:
+            logging.info(f"Resposta do LLM para {filename}: {llm_response}")
 
 create_sheet(results)
 
