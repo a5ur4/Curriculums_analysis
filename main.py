@@ -6,7 +6,6 @@ import openpyxl
 import re
 import logging
 import requests
-
 from pdf2image import convert_from_path
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -14,7 +13,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 folder_path = r"C:\Users\pedro\Downloads\curriculums"
 path_tesseract = r"C:\Users\pedro\AppData\Local\Programs\Tesseract-OCR"
 poppler_path = r"C:\poppler\Library\bin"
-save_path = r"C:\Users\pedro\Downloads\curriculums\images"
+save_path = r"C:\Users\pedro\Downloads\curriculums\sheets"
 txt_save_path = r"C:\Users\pedro\Downloads\curriculums\txt_files"
 pytesseract.pytesseract.tesseract_cmd = os.path.join(path_tesseract, "tesseract.exe")
 
@@ -22,7 +21,6 @@ keywords = ["Java", "Spring", "Python", "Django", "JavaScript", "React", "Node",
             "SQL", "NoSQL", "MongoDB", "PostgreSQL", "MySQL", "HTML", "CSS", "Bootstrap"]
 
 results = []
-
 experiences = []
 
 def convert_to_image(file_path, poppler_path, save_path):
@@ -35,7 +33,7 @@ def convert_to_image(file_path, poppler_path, save_path):
             image_paths.append(image_path)
         return image_paths
     except Exception as e:
-        logging.error(f"Erro ao converter PDF para imagens: {file_path} - {e}")
+        logging.error(f"Error converting PDF to images: {file_path} - {e}")
         return []
 
 def extract_text(image_path):
@@ -43,7 +41,7 @@ def extract_text(image_path):
         text = pytesseract.image_to_string(cv2.imread(image_path), lang="eng")
         return text
     except Exception as e:
-        logging.error(f"Erro ao extrair texto da imagem: {image_path} - {e}")
+        logging.error(f"Error extracting text from image: {image_path} - {e}")
         return ""
 
 def save_to_json(data, json_save_path, filename):
@@ -51,9 +49,9 @@ def save_to_json(data, json_save_path, filename):
         json_file_path = os.path.join(json_save_path, f"{os.path.splitext(filename)[0]}.json")
         with open(json_file_path, "w", encoding="utf-8") as json_file:
             json.dump(data, json_file, ensure_ascii=False, indent=4)
-        logging.info(f"Dados salvos em JSON: {json_file_path}")
+        logging.info(f"Data saved to JSON: {json_file_path}")
     except Exception as e:
-        logging.error(f"Erro ao salvar dados em JSON: {filename} - {e}")
+        logging.error(f"Error saving data to JSON: {filename} - {e}")
 
 def extract_name_from_text(text):
     lines = text.splitlines()
@@ -61,7 +59,7 @@ def extract_name_from_text(text):
         for name in line.split():
             if name.lower() in line.lower():
                 return name
-    return "Nome não encontrado"
+    return "Name not found"
 
 def extract_contact(text):
     phone_pattern = r'\(?\d{2}\)?\s?\d{4,5}-?\d{4}'
@@ -71,8 +69,8 @@ def extract_contact(text):
     emails = re.findall(email_pattern, text)
     
     return {
-        "telefones": phones if phones else ["Telefone não encontrado"],
-        "e-mails": emails if emails else ["E-mail não encontrado"]
+        "phones": phones if phones else ["Phone not found"],
+        "emails": emails if emails else ["Email not found"]
     }
 
 def extract_experience(text):
@@ -84,46 +82,39 @@ def extract_experience(text):
         if re.search(date_pattern, line):
             experiences.append(line.strip())
     
-    unique_experiences = list(set(experiences))
-    return unique_experiences
+    return list(set(experiences))
 
-def aproved(found_keywords):
+def approved(found_keywords):
     return len(found_keywords) > 5
 
 def create_sheet(results):
     try:
         wb = openpyxl.Workbook()
         ws = wb.active
-        ws.title = "Resultados"
+        ws.title = "Results"
 
-        headers = ["Arquivo", "Nome", "Telefones", "E-mails", "Aprovado", "Experiências"]
+        # Add new column for LLM Summary
+        headers = ["File", "Name", "Phones", "Emails", "Approved", "Experiences", "LLM Summary"]
         for col, header in enumerate(headers, start=1):
             cell = ws.cell(row=1, column=col, value=header)
             cell.font = openpyxl.styles.Font(bold=True)
             cell.alignment = openpyxl.styles.Alignment(horizontal="center")
 
-        print("Inserindo dados na planilha...")
+        logging.info("Inserting data into spreadsheet...")
         for i, result in enumerate(results, start=2):
             if not isinstance(result, dict):
-                logging.error(f"Formato inválido para o resultado: {result}")
+                logging.error(f"Invalid result format: {result}")
                 continue
 
-            arquivo = result.get("Arquivo", "Desconhecido")
-            name = result.get("Nome", "Nome não encontrado")
-            telefones = result.get("Telefones", ["Telefone não encontrado"])
-            emails = result.get("E-mails", ["E-mail não encontrado"])
-            experiencias = result.get("Experiências", [])
-            aprovado = result.get("Aprovado", False)
+            ws[f"A{i}"] = result.get("File", "Unknown")
+            ws[f"B{i}"] = result.get("Name", "Name not found")
+            ws[f"C{i}"] = ", ".join(result.get("Phones", ["Phone not found"]))
+            ws[f"D{i}"] = ", ".join(result.get("Emails", ["Email not found"]))
+            ws[f"E{i}"] = "Yes" if result.get("Approved", False) else "No"
+            ws[f"F{i}"] = "\n".join(result.get("Experiences", []))
+            ws[f"G{i}"] = result.get("LLM Summary", "No summary available")
 
-            ws[f"A{i}"] = arquivo
-            ws[f"B{i}"] = name
-            ws[f"C{i}"] = ", ".join(telefones)
-            ws[f"D{i}"] = ", ".join(emails)
-            ws[f"E{i}"].alignment = openpyxl.styles.Alignment(wrap_text=True)
-            ws[f"E{i}"] = "Sim" if aprovado else "Não"
-            ws[f"F{i}"] = "\n".join(experiencias)
-
-        print("Ajustando larguras das colunas...")
+        logging.info("Adjusting column widths...")
         for col in ws.columns:
             max_length = 0
             column = openpyxl.utils.get_column_letter(col[0].column)
@@ -135,50 +126,60 @@ def create_sheet(results):
         if not os.path.exists(save_path):
             os.makedirs(save_path)
 
-        output_file = os.path.join(save_path, "resultados.xlsx")
+        output_file = os.path.join(save_path, "results.xlsx")
         wb.save(output_file)
-        print(f"Planilha de resultados criada com sucesso em {output_file}!")
+        logging.info(f"Results spreadsheet successfully created at {output_file}!")
 
     except Exception as e:
-        logging.error(f"Erro ao criar planilha de resultados: {e}")
-        print(f"Erro: {e}")
+        logging.error(f"Error creating spreadsheet: {e}")
 
-# I think this is the best way to do this is seending all the extracted text to the LLM
-# and writing a better prompt to get the best results using the keywords as a base
-# and what the recruiter is looking for in the resume
 def send_to_llm(data):
-    url = "http://localhost:11434/api/generate" # Change this to the LLM API URL you are using
-    headers = {
-        "Content-Type": "application/json",
-    }
+    url = "http://localhost:11434/api/generate"
+    headers = {"Content-Type": "application/json"}
+    prompt_message = '''Generate a candidate summary for a software developer position. Structure the response as:
+
+    [Core Competencies]
+    - 3-5 key technical strengths
+
+    [Key Experience Highlights]
+    - 2-3 notable positions/achievements with metrics if available
+
+    [Technical Skills]
+    - Categorize skills (e.g., "Languages: Java, Python | Frameworks: Spring, React")
+
+    [Education]
+    - Degree and institution (if mentioned)
+
+    Keep responses:
+    1. Succinct (max 300 characters)
+    2. Use bullet points and abbreviations
+    3. Focus on software development requirements
+    4. Exclude personal pronouns/narrative
+
+    Resume Content: ''' # Add your prompt message here
     payload = {
-        "model": "llama3.2", # Change this to the model you are using
-        "prompt": f"Analyze this resume data: {json.dumps(data)}",
+        "model": "llama3.2", # Change to your model, i'm using llama3.2 with 3b parameters, so if you want a better result, change to a bigger model
+        "prompt": f"{prompt_message}\n\n{json.dumps(data, ensure_ascii=False)}",
         "stream": False
     }
+    
     try:
         response = requests.post(url, headers=headers, json=payload)
         response.raise_for_status()
-        return response.json()
-    except requests.exceptions.RequestException as e:
-        logging.error(f"Error sending data to LLM: {e}")
+        return response.json().get("response", "No summary generated")
+    except Exception as e:
+        logging.error(f"Error sending to LLM: {e}")
         return None
 
-for result in results:
-    llm_response = send_to_llm(result)
-    if llm_response:
-        logging.info(f"LLM response for {result['Arquivo']}: {llm_response}")
+# Create necessary directories
+os.makedirs(save_path, exist_ok=True)
+os.makedirs(txt_save_path, exist_ok=True)
 
-if not os.path.exists(save_path):
-    os.makedirs(save_path)
-
-if not os.path.exists(txt_save_path):
-    os.makedirs(txt_save_path)
-
+# Process PDF files
 for filename in os.listdir(folder_path):
     if filename.endswith(".pdf"):
         file_path = os.path.join(folder_path, filename)
-        logging.info(f"Processando arquivo: {filename}")
+        logging.info(f"Processing file: {filename}")
         
         image_paths = convert_to_image(file_path, poppler_path, save_path)
         all_text = ""
@@ -193,27 +194,31 @@ for filename in os.listdir(folder_path):
         with open(txt_file_path, "w", encoding="utf-8") as txt_file:
             txt_file.write(all_text)
 
+        # Extract information
         name = extract_name_from_text(all_text)
         contact_info = extract_contact(all_text)
         experience_info = extract_experience(all_text)
         found_keywords = [kw for kw in keywords if kw.lower() in all_text.lower()]
-        is_approved = aproved(found_keywords)
+        is_approved = approved(found_keywords)
 
+        # Create result entry
         result = {
-            "Arquivo": filename,
-            "Nome": name,
-            "Telefones": contact_info["telefones"],
-            "E-mails": contact_info["e-mails"],
-            "Aprovado": is_approved,
-            "Experiências": experience_info
+            "File": filename,
+            "Name": name,
+            "Phones": contact_info["phones"],
+            "Emails": contact_info["emails"],
+            "Approved": is_approved,
+            "Experiences": experience_info
         }
 
+        # Get LLM summary and add to result
+        llm_summary = send_to_llm(result)
+        if llm_summary:
+            result["LLM Summary"] = llm_summary
+        
         results.append(result)
 
-        llm_response = send_to_llm(result)
-        if llm_response:
-            logging.info(f"Resposta do LLM para {filename}: {llm_response}")
-
+# Create final spreadsheet
 create_sheet(results)
 
-#Made by: Pedro Bastos - a5ur4
+# Made by: Pedro Bastos - a5ur4
